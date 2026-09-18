@@ -22,14 +22,35 @@ import { Button } from "./ui/button";
 import CreateJobApplicationDialog from "./create-job-dialog";
 import JobApplicationCard from "./job-application-card";
 import { useBoard } from "@/lib/hooks/useBoards";
+import {
+  closestCorners,
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useState } from "react";
+
 
 
 interface KanbanBoardProps {
   board: Board;
   userId: string;
 }
-
-const COLUMN CONFIG: Array<{color: string; icon: React.ReactNode}> =[
+interface ColConfig {
+  color: string; icon: React.ReactNode
+}
+const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
  {
     color: "bg-cyan-500",
     icon: <Calendar className="h-4 w-4" />,
@@ -53,11 +74,91 @@ const COLUMN CONFIG: Array<{color: string; icon: React.ReactNode}> =[
 
 ]
 
+ function DroppableColumn({
+  column,
+   config,
+   boardId
+  }:
+  {column: Column;
+   config: ColConfig
+  boardId :string;
+  })   {
+     console.log(column);
+  
+    return(
+     <Card className="min-w-[300px] flex-shrink-0 shadow-md p-0">
+      <CardHeader
+        className={`${config.color} text-white rounded-t-lg pb-3 pt-3`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {config.icon}
+            <CardTitle className="text-white text-base font-semibold">
+              {column.name}
+            </CardTitle>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-white hover:bg-white/20"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Column
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </CardHeader>
+
+      <CardContent
+        ref={setNodeRef}
+        className={`space-y-2 pt-4 bg-gray-50/50 min-h-[400px] rounded-b-lg ${
+          isOver ? "ring-2 ring-blue-500" : ""
+        }`}
+      >
+        <SortableContext
+          items={sortedJobs.map((job) => job._id)}
+          strategy={verticalListSortingStrategy}
+        >
+          {sortedJobs.map((job, key) => (
+            <SortableJobCard
+              key={key}
+              job={{ ...job, columnId: job.columnId || column._id }}
+              columns={sortedColumns}
+            />
+          ))}
+        </SortableContext>
+
+        <CreateJobApplicationDialog columnId={column._id} boardId={boardId} />
+      </CardContent>
+    </Card>
+
+    )}
+
+
 export default function KanbanBoard({board, userId} : KanbanBoardProps) {
+  const columns = board.columns;
   return (
     <> 
     <div>
-      <div></div>
+      <div>
+        {columns.map((col, key) =>{
+        const config = COLUMN_CONFIG[key] || {
+          color : "bg-gray-500",
+          icon:<Calender classname="h-4 w-4"/>
+        };
+          return<DroppableColumn key={key} column={col} config={config} boardId={board._id} />;
+        }
+ 
+        )}
+      </div>
     </div>
     </>
   );
