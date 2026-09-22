@@ -1,12 +1,10 @@
 "use client";
 
-import { Board, Column, JobApplication } from "@/lib/models/models.types";
 import {
   Award,
   Calendar,
   CheckCircle2,
   Mic,
-  MoreHorizontal,
   MoreVertical,
   Trash2,
   XCircle,
@@ -21,7 +19,6 @@ import {
 import { Button } from "./ui/button";
 import CreateJobApplicationDialog from "./create-job-dialog";
 import JobApplicationCard from "./job-application-card";
-import { useBoard } from "@/lib/hooks/useBoards";
 import {
   closestCorners,
   DndContext,
@@ -41,17 +38,45 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useState } from "react";
 
+type JobApplication = {
+  _id: string;
+  columnId: string;
+  order: number;
+  company: string;
+  position: string;
+  description?: string;
+  tags?: string[];
+  notes?: string;
+  salary?: string;
+  jobUrl?: string;
+  location?: string;
+};
 
+type Column = {
+  _id: string;
+  name: string;
+  order: number;
+  jobApplications: JobApplication[];
+};
+
+type Board = {
+  _id: string;
+  name?: string;
+  userId?: string;
+  columns: Column[];
+};
 
 interface KanbanBoardProps {
-  board: Board;
+  board: Board | null;
   userId: string;
 }
+
 interface ColConfig {
-  color: string; icon: React.ReactNode
+  color: string;
+  icon: React.ReactNode;
 }
-const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
- {
+const COLUMN_CONFIG: Array<ColConfig> = [
+  {
     color: "bg-cyan-500",
     icon: <Calendar className="h-4 w-4" />,
   },
@@ -71,22 +96,33 @@ const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
     color: "bg-red-500",
     icon: <XCircle className="h-4 w-4" />,
   },
+];
 
-]
-
- function DroppableColumn({
+function DroppableColumn({
   column,
-   config,
-   boardId
-  }:
-  {column: Column;
-   config: ColConfig
-  boardId :string;
-  })   {
-     console.log(column);
-  
-    return(
-     <Card className="min-w-[300px] flex-shrink-0 shadow-md p-0">
+  config,
+  boardId,
+  sortedColumns,
+}: {
+  column: Column;
+  config: ColConfig;
+  boardId: string;
+  sortedColumns: Column[];
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: column._id,
+    data: {
+      type: "column",
+      columnId: column._id,
+    },
+  });
+
+  const sortedJobs =
+    [...(column.jobApplications || [])].sort(
+      (a: JobApplication, b: JobApplication) => a.order - b.order
+    ) || [];
+  return (
+    <Card className="min-w-[300px] flex-shrink-0 shadow-md p-0">
       <CardHeader
         className={`${config.color} text-white rounded-t-lg pb-3 pt-3`}
       >
@@ -98,15 +134,16 @@ const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
             </CardTitle>
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-white hover:bg-white/20"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-white hover:bg-white/20"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+              }
+            />
             <DropdownMenuContent align="end">
               <DropdownMenuItem className="text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -124,10 +161,10 @@ const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
         }`}
       >
         <SortableContext
-          items={sortedJobs.map((job) => job._id)}
+          items={sortedJobs.map((job: JobApplication) => job._id)}
           strategy={verticalListSortingStrategy}
         >
-          {sortedJobs.map((job, key) => (
+          {sortedJobs.map((job: JobApplication, key: number) => (
             <SortableJobCard
               key={key}
               job={{ ...job, columnId: job.columnId || column._id }}
@@ -139,27 +176,240 @@ const COLUMN_CONFIG: Array<{color: string; icon: React.ReactNode}> =[
         <CreateJobApplicationDialog columnId={column._id} boardId={boardId} />
       </CardContent>
     </Card>
+  );
+}
 
-    )}
+function SortableJobCard({
+  job,
+  columns,
+}: {
+  job: JobApplication;
+  columns: Column[];
+}) {
+  const {
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+    setNodeRef,
+  } = useSortable({
+    id: job._id,
+    data: {
+      type: "job",
+      job,
+    },
+  });
 
-
-export default function KanbanBoard({board, userId} : KanbanBoardProps) {
-  const columns = board.columns;
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
   return (
-    <> 
-    <div>
-      <div>
-        {columns.map((col, key) =>{
-        const config = COLUMN_CONFIG[key] || {
-          color : "bg-gray-500",
-          icon:<Calender classname="h-4 w-4"/>
-        };
-          return<DroppableColumn key={key} column={col} config={config} boardId={board._id} />;
-        }
- 
-        )}
-      </div>
+    <div ref={setNodeRef} style={style}>
+      <JobApplicationCard
+        job={job}
+        columns={columns}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
-    </>
+  );
+}
+
+export default function KanbanBoard({ board, userId }: KanbanBoardProps) {
+  const safeBoard = board ?? { _id: "", name: "Job Hunt", userId, columns: [] };
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [columns, setColumns] = useState<Column[]>(safeBoard.columns || []);
+
+  if (!board && !columns.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-600">
+        Creating your board...
+      </div>
+    );
+  }
+
+  const moveJob = async (
+    jobId: string,
+    targetColumnId: string,
+    targetOrder: number
+  ) => {
+    setColumns((currentColumns: Column[]) =>
+      currentColumns.map((column: Column) => {
+        if (column._id === targetColumnId) {
+          const jobs = [...(column.jobApplications || [])];
+          const moving = jobs.find((job: JobApplication) => job._id === jobId);
+          if (!moving) return column;
+
+          const remaining = jobs.filter((job: JobApplication) => job._id !== jobId);
+          remaining.splice(targetOrder, 0, { ...moving, columnId: targetColumnId });
+
+          return { ...column, jobApplications: remaining };
+        }
+
+        return {
+          ...column,
+          jobApplications: (column.jobApplications || []).filter(
+            (job: JobApplication) => job._id !== jobId
+          ),
+        };
+      })
+    );
+  };
+
+  const sortedColumns = [...columns].sort(
+    (a: Column, b: Column) => a.order - b.order
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  async function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    setActiveId(null);
+
+    if (!over || !safeBoard._id) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    let draggedJob: JobApplication | null = null;
+    let sourceColumn: Column | null = null;
+    let sourceIndex = -1;
+
+    for (const column of sortedColumns) {
+      const jobs =
+        [...(column.jobApplications || [])].sort(
+          (a: JobApplication, b: JobApplication) => a.order - b.order
+        ) || [];
+      const jobIndex = jobs.findIndex((j: JobApplication) => j._id === activeId);
+      if (jobIndex !== -1) {
+        draggedJob = jobs[jobIndex];
+        sourceColumn = column;
+        sourceIndex = jobIndex;
+        break;
+      }
+    }
+
+    if (!draggedJob || !sourceColumn) return;
+
+    // Check if dropped in a column or another job
+    const targetColumn = sortedColumns.find((col: Column) => col._id === overId);
+    const targetJob = sortedColumns
+      .flatMap((col: Column) => col.jobApplications || [])
+      .find((job: JobApplication) => job._id === overId);
+
+    let targetColumnId: string;
+    let newOrder: number;
+
+    if (targetColumn) {
+      targetColumnId = targetColumn._id;
+      const jobsInTarget =
+        [...(targetColumn.jobApplications || [])]
+          .filter((j: JobApplication) => j._id !== activeId)
+          .sort((a: JobApplication, b: JobApplication) => a.order - b.order) || [];
+      newOrder = jobsInTarget.length;
+    } else if (targetJob) {
+      const targetJobColumn = sortedColumns.find((col: Column) =>
+        col.jobApplications.some((j: JobApplication) => j._id === targetJob._id)
+      );
+      targetColumnId = targetJob.columnId || targetJobColumn?._id || "";
+      if (!targetColumnId) return;
+
+      const targetColumnObj = sortedColumns.find(
+        (col: Column) => col._id === targetColumnId
+      );
+
+      if (!targetColumnObj) return;
+
+      const allJobsInTargetOriginal =
+        [...(targetColumnObj.jobApplications || [])].sort(
+          (a: JobApplication, b: JobApplication) => a.order - b.order
+        ) || [];
+
+      const allJobsInTargetFiltered =
+        allJobsInTargetOriginal.filter((j: JobApplication) => j._id !== activeId) || [];
+
+      const targetIndexInOriginal = allJobsInTargetOriginal.findIndex(
+        (j: JobApplication) => j._id === overId
+      );
+
+      const targetIndexInFiltered = allJobsInTargetFiltered.findIndex(
+        (j: JobApplication) => j._id === overId
+      );
+
+      if (targetIndexInFiltered !== -1) {
+        if (sourceColumn._id === targetColumnId) {
+          if (sourceIndex < targetIndexInOriginal) {
+            newOrder = targetIndexInFiltered + 1;
+          } else {
+            newOrder = targetIndexInFiltered;
+          }
+        } else {
+          newOrder = targetIndexInFiltered;
+        }
+      } else {
+        newOrder = allJobsInTargetFiltered.length;
+      }
+    } else {
+      return;
+    }
+
+    if (!targetColumnId) {
+      return;
+    }
+
+    await moveJob(activeId, targetColumnId, newOrder);
+  }
+
+  const activeJob = sortedColumns
+    .flatMap((col: Column) => col.jobApplications || [])
+    .find((job: JobApplication) => job._id === activeId);
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-4">
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {sortedColumns.map((col: Column, key: number) => {
+            const config = COLUMN_CONFIG[key] || {
+              color: "bg-gray-500",
+              icon: <Calendar className="h-4 w-4" />,
+            };
+            return (
+              <DroppableColumn
+                key={key}
+                column={col}
+                config={config}
+                boardId={safeBoard._id}
+                sortedColumns={sortedColumns}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <DragOverlay>
+        {activeJob ? (
+          <div className="opacity-50">
+            <JobApplicationCard job={activeJob} columns={sortedColumns} />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
