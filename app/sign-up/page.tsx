@@ -39,11 +39,11 @@ export default function SignUp(){
             email,
             password,
         });
-        if(result.error){
-            setError(result.error.message ?? "Failed to sign up");
-        } else{
-           router.push("/dashboard");
-        }
+      if (result.error) {
+  setError(result.error.message ?? "Failed to sign up");
+} else {
+  window.location.href = "/dashboard";
+}
      } catch(err){
         setError("An unexpected error occured");
      } finally{

@@ -26,17 +26,20 @@ import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import React, { useState } from "react";
+
 interface JobApplicationCardProps {
   job: JobApplication;
   columns: Column[];
   dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+  onDelete?: (jobId: string) => void;
 }
 
 export default function JobApplicationCard({
   job,
   columns,
   dragHandleProps,
-}: JobApplicationCardProps) {
+  onDelete,
+}: JobApplicationCardProps)  {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     company: job.company,
@@ -70,16 +73,19 @@ export default function JobApplicationCard({
   }
 
   async function handleDelete() {
-    try {
-      const result = await deleteJobApplication(job._id);
+  try {
+    const result = await deleteJobApplication(job._id);
 
-      if (result.error) {
-        console.error("Failed to delete job application:", result.error);
-      }
-    } catch (err) {
-      console.error("Failed to move job application: ", err);
+    if (result.error) {
+      console.error("Failed to delete job application:", result.error);
+      return;
     }
+
+    onDelete?.(job._id);
+  } catch (err) {
+    console.error("Failed to delete job application:", err);
   }
+}
 
   async function handleMove(newColumnId: string) {
     try {
